@@ -15,11 +15,11 @@ PhotoPrism® is an AI-Powered Photos App for the Decentralized Web.It makes use 
 
 I created this tool because I have a love/hate relationship with Google Photos. 
 
-**I love** its organization and sharing capabilities, b
+**I love** its organization and sharing capabilities
 
 **I hate**  the restrictions enforced by Google that come with exporting full sets of information and regaining ownership:
 
-* Google Takeout export is a nightmare (only all albums - hug file) and does only include albums that are not shared
+* Google Takeout export is a nightmare (only all albums - huge file) and does only include albums that are not shared
 * Google Photo API does remove all location information
 * Google Photo API does only export the orginal photos, anything that has been adjusted with Google Photo Editor can not be exported
 

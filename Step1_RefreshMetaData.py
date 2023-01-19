@@ -26,25 +26,21 @@ from config import CLIENT_SECRET_FILE,TAKEOUT_PATH,S10_BACKUP_PATH,PICASA_BACKUP
 from config import GOOGLE_TAKEOUT_REWORK_TEXT
 from config import STR_REFRESH_PICS_META_FROM_GOOGLE,STR_REFRESH_PHOTOS_FILE_PATH,STR_COPY_TO_TARGET_FOLDERS,STR_PHOTO_PRISM_CREATE_ALBUM
 
-load_dotenv()
-
 
 def refresh_album_metadata():
-    TEST_BREAK=10
+    TEST_BREAK=2
     TEST_ALBUM=1034
 
     service = authorize.init(CLIENT_SECRET_FILE)
     album_manager = Album(service)
     media_manager = Media(service)
-    print("Getting a list of albums...")
     album_iterator = album_manager.list()
 
     # *************************************************************************************
     # Step-1: Read all Albums meta information from Google Photos
     # *************************************************************************************
 
-
-    print("** Refresh Album **")
+    print("\n\n** Refresh Album **")
     session = Session(local_engine)
     session.execute(update(db_Albums).values(album_seq=None))
 
@@ -98,7 +94,7 @@ def refresh_album_metadata():
     # Step2: Read all pics meta information from Google Photos based on downloaded albums
     # *************************************************************************************
 
-    print("** Refresh Fotos **")
+    print("\n\n** Refresh Fotos **")
     session = Session(local_engine)
 
     session.execute(update(db_Photos).values(photo_seq=None))
@@ -131,14 +127,16 @@ def refresh_album_metadata():
                     camera=camera,
                     photo_seq=photo_seq,
                     updated_at=datetime.now(),
+                    pp_upload_status='U',
                     created=datetime.strptime(photo['mediaMetadata']['creationTime'], "%Y-%m-%dT%H:%M:%SZ"))
 
                 backup_source, filepath = photo_find_path(db_Album.title, db_photo.filename, db_photo.created, picasa_pics)
+                if backup_source=='Google':
+                    db_photo.google_api_status='U'
+
                 db_photo.backup_source = backup_source
                 db_photo.filepath = filepath
-                session.add(db_photo)
-
-                print("   " + db_photo.filename)
+                str_action='NEW'
             else:
                 db_photo = session.execute(foto_find_stmt).first()[0]
                 db_photo.photo_seq = photo_seq
@@ -148,10 +146,20 @@ def refresh_album_metadata():
                 if backup_source != db_photo.backup_source or filepath != db_photo.filepath:
                     db_photo.updated_at = datetime.now()
                     db_photo.backup_source = backup_source
-                    db_photo.filepath = filepath
+                    db_photo.pp_upload_status='U'
 
-                session.add(db_photo)
+                    # Filepath comes from existing files or will be determined later via Google api call
+                    if db_photo.filepath is None and backup_source == 'Google':
+                        db_photo.google_api_status = 'U'
+                    else:
+                        db_photo.filepath = filepath
 
+                str_action='OLD'
+
+            print(str_action+" "+ (db_photo.backup_source or  "No Source") + "\t API: "+(db_photo.google_api_status or "N") +
+                  " PP: "+(db_photo.pp_upload_status or "N")+ "\t" + db_photo.filename)
+
+            session.add(db_photo)
             photo_seq = photo_seq + 1
 
     session.execute(update(db_JobControl).where(db_JobControl.step == STR_REFRESH_PICS_META_FROM_GOOGLE).values(last_run_at=datetime.now()))
@@ -164,7 +172,7 @@ def photo_find_path(db_album_title, photo_filename, photo_created, picasa_pics):
     # Takeout
     search_dir = os.path.join(TAKEOUT_PATH, db_album_title.strip())
     search_file_path = os.path.join(search_dir, photo_filename)
-    backup_source = None
+    backup_source = 'Google'
     filepath = None
     rework_flag = ''
 
@@ -204,8 +212,6 @@ def photo_find_path(db_album_title, photo_filename, photo_created, picasa_pics):
 
             session.close()
 
-    if backup_source is None: str_backup_source= "None"
-    else: str_backup_source=backup_source
 
-    print("   " + photo_filename + "\t" + str_backup_source + "\t " + rework_flag)
+#    print("   " + photo_filename + "\t" + (str_backup_source or "None")+ "\t " + rework_flag)
     return backup_source, filepath
