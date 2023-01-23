@@ -28,7 +28,8 @@ from config import STR_REFRESH_PICS_META_FROM_GOOGLE,STR_REFRESH_PHOTOS_FILE_PAT
 from config import  album_manager, media_manager
 
 from Step1_RefreshMetaData import refresh_album_metadata
-from Step2_CollectPhotoFiles import  collect_photo_files
+from Step2_UploadPhotos import  upload_photos_to_pp
+from Step3_UpdateAlbumInformation import update_photo_prism_album
 
 load_dotenv()
 logging.basicConfig()
@@ -36,14 +37,15 @@ logging.getLogger("sqlalchemy.engine").setLevel(logging.ERROR)
 
 
 # ****************   Steps ***********************************
-REFRESH_ALBUM_META_FROM_GOOGLE = True  # Loop over all albums from Google and update metadata in local DB
-COLLECT_PHOTO_FILES = True
+STEP1_REFRESH_METADATA = False  # Loop over all albums from Google and update metadata in local DB
+STEP2_UPLOAD_PHOTOS = False
+STEP3_UPDATE_ALBUM_INFO = True
 
 REFRESH_PHOTOS_FILE_PATH = False  # Try to match all downloaded photos from Google with a file at the local PC to get full exif-information
 REFRESH_MISSING_PHOTOS_FROM_GOOGLE = False  # All photos without source (could not be matched in previous step) will download information from Google
 REFRESH_ALBUM_COVER = False  # Loop over all albums in local DB and refresh the album-cover from Google metatdata
 COPY_TO_TARGET_FOLDERS = False
-PHOTO_PRISM_CREATE_ALBUM = False
+
 PHOTO_PRISM_UPDATE_COVER = False
 REFRESH_PICASA_FOLDER_DB = False
 
@@ -51,12 +53,12 @@ REFRESH_PICASA_FOLDER_DB = False
 
 def main():
     # Step-1: Read all Albums meta information from Google Photos
-    if REFRESH_ALBUM_META_FROM_GOOGLE:
+    if STEP1_REFRESH_METADATA:
         refresh_album_metadata()
 
     # Step-2: Download missing files from Google and prepare files to PhotoPrism import (copy to import folder)
-    if COLLECT_PHOTO_FILES:
-        collect_photo_files()
+    if STEP2_UPLOAD_PHOTOS:
+        upload_photos_to_pp()
 
     # Step-3: Loads all files in a folder and stores filename and path in tmp table (only when new folder structure)
 
@@ -73,112 +75,29 @@ def main():
         print("DONE")
 
 
-    # Step-6: Based on album meta information from Google tries to find the cover photo ID and updates in album
-    if REFRESH_ALBUM_COVER:
-        print("** Refresh Album Cover Information**")
-        session = Session(local_engine)
-        for db_Album in session.scalars(select(db_Albums)):
-            cover_photo_stmt = select(db_Photos).where(db_Photos.album_id == db_Album.id).where(db_Photos.filename == db_Album.cover_filename)
-            cover_photo = session.execute(cover_photo_stmt).first()
-
-            if cover_photo is not None:
-                my_cover_photo = cover_photo[0]
-                db_Album.cover_path = target_photo_filename(db_Album.id, my_cover_photo.id, my_cover_photo.filename)
-                db_Album.cover_photo_id = my_cover_photo.id
-                session.add(db_Album)
-            else:
-                print("Cover not found for Title: " + db_Album.title)
-
-        session.commit()
-        session.close()
+    # # Step-6: Based on album meta information from Google tries to find the cover photo ID and updates in album
+    # if REFRESH_ALBUM_COVER:
+    #     print("** Refresh Album Cover Information**")
+    #     session = Session(local_engine)
+    #     for db_Album in session.scalars(select(db_Albums)):
+    #         cover_photo_stmt = select(db_Photos).where(db_Photos.album_id == db_Album.id).where(db_Photos.filename == db_Album.cover_filename)
+    #         cover_photo = session.execute(cover_photo_stmt).first()
+    #
+    #         if cover_photo is not None:
+    #             my_cover_photo = cover_photo[0]
+    #             db_Album.cover_path = target_photo_filename(db_Album.id, my_cover_photo.id, my_cover_photo.filename)
+    #             db_Album.cover_photo_id = my_cover_photo.id
+    #             session.add(db_Album)
+    #         else:
+    #             print("Cover not found for Title: " + db_Album.title)
+    #
+    #     session.commit()
+    #     session.close()
 
 
     # Step-8: Create the Album in Photoprism from local database information
-    if PHOTO_PRISM_CREATE_ALBUM:
-        print("** Create Albums with Photos in Photoprism**")
-
-        server = "http://zo:2342"
-        sessionAPI = "/api/v1/session"
-        albumAPI = "/api/v1/albums"
-        fileAPI = "/api/v1/files"
-        fotoAPI = "/api/v1/photos"
-
-        ## Authenticate with Photo Prism Server
-        s = requests.Session()
-
-        r = s.post(server + sessionAPI, json={'username': os.getenv('PP_API_USER'), 'password': os.getenv('PP_API_PWD')})
-        auth_session_id = r.json()['id']
-        s.headers.update({"X-Session-ID": auth_session_id})
-
-        ## Loop over all Albums
-        session = Session(local_engine)
-        last_photo_prism_album_update = session.execute(select(db_JobControl).where(db_JobControl.step == STR_PHOTO_PRISM_CREATE_ALBUM)).first()[0].last_run_at
-
-        stmt_get_update_albums = select(db_Photos.album_id).join(db_Albums, db_Albums.id==db_Photos.album_id).where((db_Albums.updated_at > last_photo_prism_album_update) | (db_Photos.updated_at > last_photo_prism_album_update)).distinct()
-        for db_Album_id in session.scalars(stmt_get_update_albums):
-
-            db_Album=session.execute(select(db_Albums).where(db_Albums.id == db_Album_id)).first()[0]
-            print("Album: "+db_Album.title)
-            # create album
-            album_uid = s.post(server + albumAPI, json={'Title': db_Album.title, 'Description': db_Album.title}).json()['UID']
-            json_photo = {'photos': []}
-            db_Album.pp_uid = album_uid
-
-            photo_upload_stmt = select(db_Photos).where(db_Photos.album_id == db_Album.id).where(db_Photos.backup_source != None).order_by(db_Photos.photo_seq)
-            for db_photo in session.scalars(photo_upload_stmt):
-                print("   Photo: " + db_photo.filename)
-                # get uid (photo was loaded before to PhotoPrism
-                photo_hash = get_sha1hash(db_photo.filepath)
-                foto_uid = s.get(server + fileAPI + "/" + photo_hash).json()['PhotoUID']
-                json_photo['photos'].append(foto_uid)
-
-            r = s.post(server + albumAPI + "/" + album_uid + "/photos", json=json_photo)
-
-            if r.status_code == 200:
-                print("** OK **")
-            else:
-                print("************** ERROR: " + str(r.status_code) + "for Album: " + db_Album.title)
-
-        session.commit()
-        session.close()
-
-    # Step - 9: Update the cover photo by direct updating PhotoPrism database
-    if PHOTO_PRISM_UPDATE_COVER:
-        print("** Update Cover Photo in PhotoPrism**")
-        session = Session()
-
-        for db_Album in session.scalars(select(db_Albums)):
-            # find matching Album in PP
-
-            pp_uid = str.encode(db_Album.pp_uid)
-            pp_album_find_stmt = select(pp_Albums).where(pp_Albums.album_uid == pp_uid)
-            pp_Album = session.execute(pp_album_find_stmt).first()[0]
-
-            # Calculate hash of the cover photo
-            cover_photo_stmt = select(db_Photos).where(db_Photos.id == db_Album.cover_photo_id)
-            cover_photo = session.execute(cover_photo_stmt).first()[0]
-            cover_hash = get_sha1hash(cover_photo.filepath)
-
-            # Update the PP album
-            pp_Album.thumb = str.encode(cover_hash)
-            pp_Album.album_order = str.encode('added')
-
-        session.commit()
-        session.close()
-
-
-def get_sha1hash(file):
-    BLOCK_SIZE = 65536  # The size of each read from the file
-
-    file_hash = hashlib.sha1()  # Create the hash object, can use something other than `.sha256()` if you wish
-    with open(file, 'rb') as f:  # Open the file to read it's bytes
-        fb = f.read(BLOCK_SIZE)  # Read from the file. Take in the amount declared above
-        while len(fb) > 0:  # While there is still data being read from the file
-            file_hash.update(fb)  # Update the hash
-            fb = f.read(BLOCK_SIZE)  # Read the next block from the file
-
-    return file_hash.hexdigest()  # Get the hexadecimal digest of the hash
-
+    if STEP3_UPDATE_ALBUM_INFO:
+        update_photo_prism_album()
 
 
 

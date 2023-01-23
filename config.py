@@ -12,14 +12,15 @@ from gphotospy.media import Media, MediaItem
 GOOGLE_TAKEOUT_REWORK_TEXT = '*bearbeitet*'
 
 CLIENT_SECRET_FILE = "gphoto_ouath.json"
-TAKEOUT_PATH = "/media/development/DATEN/BACKUP/google_takeout_12_2022/"
-S10_BACKUP_PATH = "/media/development/DATEN/BACKUP/photos_s10_backup/Camera"
-PICASA_BACKUP_PATH = "/media/development/DATEN/DATA/MyPics"
-GOOGLE_DOWNLOAD_RESULTS_PATH = "/media/development/DATEN/BACKUP/google_photo_api_download"
+TAKEOUT_PATH = "/media/DATEN/BACKUP/google_takeout_12_2022/"
+S10_BACKUP_PATH = "/media/DATEN/BACKUP/photos_s10_backup/Camera"
+PICASA_BACKUP_PATH = "/media/DATEN/DATA/MyPics"
+GOOGLE_DOWNLOAD_RESULTS_PATH = "/media/DATEN/BACKUP/google_photo_api_download"
 
 #user development and new group photoprism created, developmen and cneuhaus are part of this group, group has write access to that folder
 #sudo mount -t cifs -o credentials=~/.smbcredentials,uid=1001,gid=1001 //zo/photoprism_import //home/development/PhotoPrism_Import_Donald
 COPY_TARGET_FOLDER_PATH ='//home/development/PhotoPrism_Import_Donald'
+#COPY_TARGET_FOLDER_PATH ='//home/development/tmp'
 #old path on SSD:  '/media/development/SSD_EXTERNAL_500/PhotoPrism'
 
 STR_REFRESH_PICS_META_FROM_GOOGLE = 'REFRESH_PHOTO_META_FROM_GOOGLE'
@@ -55,3 +56,10 @@ from gphotospy import authorize
 service = authorize.init(CLIENT_SECRET_FILE)
 album_manager = Album(service)
 media_manager = Media(service)
+
+## PhotoPrism API ######################################################
+SERVER = "http://zo:2342"
+SESSION_API = "/api/v1/session"
+ALBUM_API = "/api/v1/albums"
+FILE_API = "/api/v1/files"
+FOTO_API = "/api/v1/photos"
