@@ -20,12 +20,12 @@ from os.path import exists
 import requests
 import command
 import glob
-from config import db_PicasaFolder,db_Albums,db_Photos,db_JobControl, pp_Photos, pp_Albums,local_engine,pp_engine,picasa_pics
+from config import db_PhotoArchive,db_Albums,db_Photos,db_JobControl,local_engine,picasa_pics
 from config import CLIENT_SECRET_FILE,TAKEOUT_PATH,S10_BACKUP_PATH,PICASA_BACKUP_PATH,GOOGLE_DOWNLOAD_RESULTS_PATH,COPY_TARGET_FOLDER_PATH
 from config import GOOGLE_TAKEOUT_REWORK_TEXT
 from config import STR_REFRESH_PICS_META_FROM_GOOGLE,STR_REFRESH_PHOTOS_FILE_PATH,STR_COPY_TO_TARGET_FOLDERS,STR_PHOTO_PRISM_CREATE_ALBUM
 from config import  album_manager, media_manager
-from config import SERVER,SESSION_API,ALBUM_API,FILE_API,FOTO_API
+
 
 def update_photo_prism_album():
 
@@ -57,9 +57,7 @@ def update_photo_prism_album():
             print("   Photo: " + db_photo.filename)
             # get uid from hash (photo was loaded before to PhotoPrism)
             foto_uid = s.get(SERVER + FILE_API + "/" + db_photo.hash).json()['PhotoUID']
-            pp_photo=s.get(SERVER + FOTO_API + "/" + foto_uid).json()
-
-
+#            pp_photo=s.get(SERVER + FOTO_API + "/" + foto_uid).json()
 
             json_photo['photos'].append(foto_uid)
 

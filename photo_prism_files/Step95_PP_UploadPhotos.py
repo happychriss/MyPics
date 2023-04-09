@@ -20,7 +20,7 @@ from os.path import exists
 import requests
 import command
 import glob
-from config import db_PicasaFolder,db_Albums,db_Photos,db_JobControl, pp_Photos, pp_Albums,local_engine,pp_engine,picasa_pics
+from config import db_PhotoArchive,db_Albums,db_Photos,db_JobControl, pp_Photos, pp_Albums,local_engine,pp_engine,picasa_pics
 from config import CLIENT_SECRET_FILE,TAKEOUT_PATH,S10_BACKUP_PATH,PICASA_BACKUP_PATH,GOOGLE_DOWNLOAD_RESULTS_PATH,COPY_TARGET_FOLDER_PATH
 from config import GOOGLE_TAKEOUT_REWORK_TEXT
 from config import STR_REFRESH_PICS_META_FROM_GOOGLE,STR_REFRESH_PHOTOS_FILE_PATH,STR_COPY_TO_TARGET_FOLDERS,STR_PHOTO_PRISM_CREATE_ALBUM
@@ -34,7 +34,7 @@ def upload_photos_to_pp():
     session = Session(local_engine)
     photo_no_backup_source_stmt = select(db_Photos).where(db_Photos.google_api_status == 'U')
     for db_photo in session.scalars(photo_no_backup_source_stmt):
-        g_photo = media_manager.get(db_photo.media_id)
+        g_photo = media_manager.get(db_photo.google_id)
         g_media = MediaItem(g_photo)
 
         download_path = os.path.join(GOOGLE_DOWNLOAD_RESULTS_PATH, "IDG_" + str(db_photo.id) + "_" + sanitize_filename(db_photo.filename).replace(" ", "_"))

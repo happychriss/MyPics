@@ -369,7 +369,7 @@ Usage: transfer-album.sh <options>
                 # Shift to the next argument
                 shift
                 ;;
-            --album-name | -n )
+            --album-my_file_name | -n )
                 if [ "$importAll" = "true" ]; then
                     echo "Cannot specify both -a and -n" >&2
                     exit 1

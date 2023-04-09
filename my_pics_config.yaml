@@ -1,0 +1,95 @@
+# Logic of prioriy
+# 1) Takeout from Album: Geo, DateUMC , *Reworked*
+# 2) Phone: Geo, DateLocal
+# 3) Takeout from "PhotoFrom": Geo, DateUMC
+# 4) Folders: Non reliable, Geo, Exif or Uploadd Date
+# 5) Google: DateLocal in Exif, No Geo
+
+
+### there is a big gap, not able to get reworked pics from shared folders....?
+
+matching_algo:
+
+  # Takeout and Album: full data, reworked pics, but with UMC Time
+  - id: MTA
+    source_format: SOURCE_TAKEOUT
+    matching_type: ALBUM
+    prio: 90
+
+  # Phone: Assuming geo data, local time, camera
+  - id: MH
+    source_format: SOURCE_PHONE
+    matching_type: TIME
+    prio: 80
+
+  # Takeout and Folder: Gets files not in Takeout-Album (because shared), full data
+  - id: MTF
+    source_format: SOURCE_TAKEOUT
+    matching_type: TIME
+    prio: 70
+
+  # Picasa: Old picasa folder, sometime geo, sometimes exif
+  - id: PI
+    source_format: SOURCE_PICASA
+    matching_type: TIME
+    prio: 60
+
+
+  - id: GOOGLE
+    source_format: SOURCE_GOOGLE
+    matching_type: TIME
+    prio: 10
+
+archives:
+
+# Special Sources
+  - source_name: Takeout # source in DB used
+    source_format: SOURCE_TAKEOUT
+    path: /media/DATEN/BACKUP/PhotoBackup/google_takeout_12_2022
+    album_source: GOOGLE
+
+  - source_name: Picasa
+    source_format: SOURCE_PICASA
+    path: /media/DATEN/DATA/MyPics
+    album_source: GOOGLE
+
+  # using same source_name type as picasa, so can use the same data from photo archive
+
+  - source_name: Picasa
+    source_format: SOURCE_FOLDER
+    path: /media/DATEN/DATA/MyPics
+    album_source: FOLDERS
+
+# Handy Folders
+
+  - source_name: S10
+    source_format: SOURCE_PHONE
+    path: /media/DATEN/BACKUP/PhotoBackup/photos_s10_christian/Camera
+    album_source: GOOGLE
+
+  - source_name: S7
+    source_format: SOURCE_PHONE
+    path: /media/DATEN/BACKUP/PhotoBackup/photo_s7_christian
+    album_source: GOOGLE
+
+  - source_name: Sony
+    source_format: SOURCE_PHONE
+    path: /media/DATEN/BACKUP/PhotoBackup/photos_sony_anne
+    album_source: GOOGLE
+
+  - source_name: Asus
+    source_format: SOURCE_PHONE
+    path: /media/DATEN/BACKUP/PhotoBackup/photos_asus_anne
+    album_source: GOOGLE
+
+  - source_name: Pixel7
+    source_format: SOURCE_PHONE
+    path: /media/DATEN/BACKUP/PhotoBackup/photos_pixel7_christian
+    album_source: GOOGLE
+
+# "Virtual Source - Photos are downloaded from Google
+
+  - source_name: Google
+    source_format: SOURCE_GOOGLE
+    path: /media/DATEN/BACKUP/PhotoBackup/google_download
+    album_source: GOOGLE

@@ -1,78 +1,99 @@
-import hashlib
-import os
 from dotenv import load_dotenv
 
-from gphotospy.album import *
-from gphotospy.media import Media, MediaItem
-from sqlalchemy import create_engine, select, update
-from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.inspection import inspect
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.ext.automap import automap_base
-import sqlalchemy as sa
-from datetime import datetime
 import logging
-import time
-from pathvalidate import sanitize_filename
-from shutil import copyfile
-import pathlib
-from os.path import exists
-import requests
-import command
-import glob
 
-from config import db_PicasaFolder,db_Albums,db_Photos,db_JobControl, pp_Photos, pp_Albums,local_engine,pp_engine
-from config import CLIENT_SECRET_FILE,TAKEOUT_PATH,S10_BACKUP_PATH,PICASA_BACKUP_PATH,GOOGLE_DOWNLOAD_RESULTS_PATH,COPY_TARGET_FOLDER_PATH
-from config import GOOGLE_TAKEOUT_REWORK_TEXT
-from config import STR_REFRESH_PICS_META_FROM_GOOGLE,STR_REFRESH_PHOTOS_FILE_PATH,STR_COPY_TO_TARGET_FOLDERS,STR_PHOTO_PRISM_CREATE_ALBUM
-from config import  album_manager, media_manager
+from config import get_archives_by_source_format, get_archive_by_source
 
-from Step1_RefreshMetaData import refresh_album_metadata
-from Step2_UploadPhotos import  upload_photos_to_pp
-from Step3_UpdateAlbumInformation import update_photo_prism_album
+from Step1_RefreshPhotoArchive import refresh_photo_archive_for_source, refresh_from_google
+from Step2_RefreshAlbums import refresh_albums_from_google,refresh_albums_from_folders
+from Step3_MatchPhotos import match_google_photos
+from Step5_EnhancePhotosMeta import enhance_photo_meta
+import json
+
+
 
 load_dotenv()
 logging.basicConfig()
 logging.getLogger("sqlalchemy.engine").setLevel(logging.ERROR)
 
 
+# ***********************************************************
+# Logic:
+# 1) All photos taken with camera are stored in photo_archive
+#    photo_archive can be populated from several sources: takeout, picasa, phone
+# 2) Metadata for all Albums and Photos is downloaded in google_album and google_photo
+# 3) Matching - for each photo in google_photos search in the photo archive for a matching photo
+#    google_photo is updated with the matching file_path as copy from photo_archive
+# 4) All photos that could not be matched are downloaded from Google photos (worst case)
+#
+# Result each photo in google_photos has a file-path pointing to the picture with most metadata information
+
 # ****************   Steps ***********************************
-STEP1_REFRESH_METADATA = False  # Loop over all albums from Google and update metadata in local DB
-STEP2_UPLOAD_PHOTOS = False
-STEP3_UPDATE_ALBUM_INFO = True
 
-REFRESH_PHOTOS_FILE_PATH = False  # Try to match all downloaded photos from Google with a file at the local PC to get full exif-information
-REFRESH_MISSING_PHOTOS_FROM_GOOGLE = False  # All photos without source (could not be matched in previous step) will download information from Google
-REFRESH_ALBUM_COVER = False  # Loop over all albums in local DB and refresh the album-cover from Google metatdata
-COPY_TO_TARGET_FOLDERS = False
+# Populate Photo Archive
+STEP1_REFRESH_ARCHIVE_TAKEOUT= False
+STEP1_REFRESH_ARCHIVE_PICASA = False
+STEP1_REFRESH_ARCHIVE_PHONES= False
+STEP1_REFRESH_ARCHIVE_CUSTOM = False #Phone
 
-PHOTO_PRISM_UPDATE_COVER = False
-REFRESH_PICASA_FOLDER_DB = False
+STEP2a_REFRESH_ALBUMS_FROM_GOOGLE = False  # Loop over all albums from Google and update metadata in local DB
+STEP2b_REFRESH_ALBUMS_FROM_FOLDERS = False # Loop over all Folders and build albums
 
+STEP3_MATCH_PHOTOS = True
+
+STEP4_REFRESH_MISSING_GOOGLE=False # photos not matched will be refreshed from Google
+STEP5_ENHANCE_PHOTOS_META=False
+
+STEP_PP_94_UPLOAD_PHOTOS = False
+STEP_PP_95_UPDATE_ALBUM_INFO = False
 
 
 def main():
-    # Step-1: Read all Albums meta information from Google Photos
-    if STEP1_REFRESH_METADATA:
-        refresh_album_metadata()
+
+
+### Refresh the Photo-Archive
+
+    if STEP1_REFRESH_ARCHIVE_TAKEOUT:
+        refresh_photo_archive_for_source('Takeout')
+
+    if STEP1_REFRESH_ARCHIVE_PICASA:
+        refresh_photo_archive_for_source('Picasa')
+
+    if STEP1_REFRESH_ARCHIVE_PHONES:
+        refresh_photo_archive_for_source('S10')
+        refresh_photo_archive_for_source('S7')
+        refresh_photo_archive_for_source('Sony')
+        refresh_photo_archive_for_source('Asus')
+#        refresh_photo_archive('ID-Pixel7')
+
+#### Refresh the Albums and Photos
+
+    if STEP2a_REFRESH_ALBUMS_FROM_GOOGLE:
+        refresh_albums_from_google()
+
+    if STEP2b_REFRESH_ALBUMS_FROM_FOLDERS:
+         refresh_albums_from_folders('Picasa')  # uses photo_archive from picasa
+
+    if STEP3_MATCH_PHOTOS:
+        match_google_photos()
+
+    if STEP4_REFRESH_MISSING_GOOGLE:
+        for archive in get_archives_by_source_format('Google'):
+           refresh_from_google(archive)
+
+    if STEP5_ENHANCE_PHOTOS_META:
+        enhance_photo_meta()
+
+    ################# Sourcecode for PhotoPrism
+
 
     # Step-2: Download missing files from Google and prepare files to PhotoPrism import (copy to import folder)
-    if STEP2_UPLOAD_PHOTOS:
+    if STEP_PP_94_UPLOAD_PHOTOS:
         upload_photos_to_pp()
 
     # Step-3: Loads all files in a folder and stores filename and path in tmp table (only when new folder structure)
 
-    if REFRESH_PICASA_FOLDER_DB:
-        print("Refresh Picasa: Loading File list")
-        session = Session(local_engine)
 
-        for path, subdirs, files in os.walk(PICASA_BACKUP_PATH):
-
-            for name in files:
-                new_entry = db_PicasaFolder(file_name=name, file_path=os.path.join(path, name))
-                session.add(new_entry)
-                session.commit()
-        print("DONE")
 
 
     # # Step-6: Based on album meta information from Google tries to find the cover photo ID and updates in album
@@ -96,7 +117,7 @@ def main():
 
 
     # Step-8: Create the Album in Photoprism from local database information
-    if STEP3_UPDATE_ALBUM_INFO:
+    if STEP_PP_95_UPDATE_ALBUM_INFO:
         update_photo_prism_album()
 
 
